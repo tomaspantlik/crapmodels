@@ -1,3 +1,6 @@
+// Package qm slouží pro zobrazení potvrzovacího okna pro ukončení aplikace
+// Lze upravit vzhled (barvy a okraj okna) a klávesové zkratky
+
 package qm
 
 import (
