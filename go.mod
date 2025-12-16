@@ -1,4 +1,4 @@
-module github.com/tomasPantlik/crapmodels
+module github.com/tomaspantlik/crapmodels
 
 go 1.25.4
 
