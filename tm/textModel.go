@@ -610,6 +610,15 @@ func (m TextModel) SetSelectedLine(numLine int) TextModel {
 	return m
 }
 
+// SelectLastLine() nastaví vybraný řádek na poslední
+func (m TextModel) SelectLastLine() TextModel {
+	if m.selectedLine < len(m.content)-1 {
+		m = m.SetSelectedLine(len(m.content) - 1)
+	}
+
+	return m
+}
+
 // SetSize() nastaví velikost okna
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TextModel) SetSize(width, height int) TextModel {
