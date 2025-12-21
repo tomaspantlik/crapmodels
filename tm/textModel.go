@@ -477,20 +477,21 @@ func (m TextModel) parseContent() TextModel {
 
 	var parsedContentLineNum int
 	for lineNum, line := range m.content {
-		w := wordwrap.String(line, m.width-2)
-		ws := strings.Split(w, "\n")
+		wrap := wordwrap.String(line, m.width-2)
+		ws := strings.Split(wrap, "\n")
 
 		var ws2 []string
-		for _, w := range ws {
+		for _, wl := range ws {
+			w := []rune(wl)
 			if len(w)-1 >= m.width-2 {
 				z := 0
 				for i := 0; i < len(w)-1-m.width-2+5; i += (m.width - 2) {
 					z = i
-					ws2 = append(ws2, w[i:i+m.width-2])
+					ws2 = append(ws2, string(w[i:i+m.width-2]))
 				}
-				ws2 = append(ws2, w[z+m.width-2:])
+				ws2 = append(ws2, string(w[z+m.width-2:]))
 			} else {
-				ws2 = append(ws2, w)
+				ws2 = append(ws2, string(w))
 			}
 		}
 
