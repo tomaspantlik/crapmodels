@@ -31,7 +31,9 @@ var (
 		PageUp2:         tea.KeyCtrlB.String(),
 		PageUp3:         tea.KeyPgUp.String(),
 		Top1:            "g",
+		Top2:            tea.KeyHome.String(),
 		Bottom1:         "G",
+		Bottom2:         tea.KeyEnd.String(),
 	}
 )
 
