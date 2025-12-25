@@ -96,7 +96,7 @@ type TextModel struct {
 	scrolledTop              int
 }
 
-// NewTextModel() je funkce pro vytvoření nového QuitModelu
+// NewTextModel() je funkce pro vytvoření nového TextModelu
 // Nastavuje některé výchozí vlastnosti jako barvy a vzhled
 // Pro nastavení vlastností modelu použít jako parametry funkce WithKeys a další
 func NewTextModel(options ...func(*TextModel)) TextModel {
@@ -191,7 +191,7 @@ func WithTitleColors(fg, bg lipgloss.Color) func(*TextModel) {
 
 // WithBorderColors() nastaví barvy okraje
 // Nastavuje i barvy scrollbaru, pokud je potřeba nastavit vlastní scrollbar barvy,
-// tak prva nastavit WithBorderColors() a pak až WithScrollBarCoors()
+// tak prva nastavit WithBorderColors() a pak až WithScrollBarColors()
 func WithBorderColors(fg, bg lipgloss.Color) func(*TextModel) {
 	return func(tm *TextModel) {
 		tm.borderStyle = tm.defaultStyle.
@@ -301,6 +301,7 @@ func (m TextModel) Update(msg tea.Msg) (TextModel, tea.Cmd, tea.Msg) {
 
 		}
 
+		return m, nil, nil
 	}
 
 	return m, nil, msg
@@ -614,6 +615,7 @@ func (m TextModel) SetSelectedLine(numLine int) TextModel {
 }
 
 // SelectLastLine() nastaví vybraný řádek na poslední
+// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TextModel) SelectLastLine() TextModel {
 	if m.selectedLine < len(m.content)-1 {
 		m = m.SetSelectedLine(len(m.content) - 1)
