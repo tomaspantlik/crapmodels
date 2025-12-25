@@ -73,10 +73,11 @@ type Keys struct {
 type TableModel struct {
 	width, height int
 
-	title   string
-	headers []string
-	content [][]string
-	table   *table.Table
+	title    string
+	headers  []string
+	content  [][]string
+	colSizes []int
+	table    *table.Table
 
 	keys Keys
 
@@ -140,7 +141,7 @@ func WithTitle(title string) func(*TableModel) {
 	}
 }
 
-// WithContent() nastaví headers tabulky
+// WithHeaders() nastaví headers tabulky
 func WithHeaders(headers ...string) func(*TableModel) {
 	return func(tm *TableModel) {
 		tm.headers = headers
@@ -151,6 +152,15 @@ func WithHeaders(headers ...string) func(*TableModel) {
 func WithContent(content ...[]string) func(*TableModel) {
 	return func(tm *TableModel) {
 		tm.content = content
+	}
+}
+
+// WithColSizes() nastaví šířku sloupečků
+// Počet hodnot musí být stejný jako počet sloupečků
+// Pokud je velikost == 0, tak je použita automatická velikost
+func WithColSizes(s ...int) func(*TableModel) {
+	return func(tm *TableModel) {
+		tm.colSizes = s
 	}
 }
 
@@ -321,18 +331,45 @@ func (m TableModel) View() string {
 		BorderTop(false).
 		BorderLeft(false)
 
-	m.table = m.table.StyleFunc(func(row, col int) lipgloss.Style {
-		switch row {
-		case table.HeaderRow:
-			return m.headerStyle
+	if m.colSizes != nil {
+		m.table = m.table.StyleFunc(func(row, col int) lipgloss.Style {
+			switch row {
+			case table.HeaderRow:
+				if m.colSizes[col] != 0 {
+					return m.headerStyle.Width(m.colSizes[col])
+				} else {
+					return m.headerStyle
+				}
 
-		case m.selectedLine - m.scrolledTop:
-			return m.selectedLineStyle
+			case m.selectedLine - m.scrolledTop:
+				if m.colSizes[col] != 0 {
+					return m.selectedLineStyle.Width(m.colSizes[col])
+				} else {
+					return m.selectedLineStyle
+				}
 
-		default:
-			return m.linesStyle
-		}
-	})
+			default:
+				if m.colSizes[col] != 0 {
+					return m.linesStyle.Width(m.colSizes[col])
+				} else {
+					return m.linesStyle
+				}
+			}
+		})
+	} else {
+		m.table = m.table.StyleFunc(func(row, col int) lipgloss.Style {
+			switch row {
+			case table.HeaderRow:
+				return m.headerStyle
+
+			case m.selectedLine - m.scrolledTop:
+				return m.selectedLineStyle
+
+			default:
+				return m.linesStyle
+			}
+		})
+	}
 
 	s += m.table.Render()
 
@@ -440,6 +477,16 @@ func (m TableModel) SetHeaders(headers ...string) TableModel {
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetContent(rows ...[]string) TableModel {
 	m.content = rows
+
+	return m
+}
+
+// SetColSizes() nastaví šířku sloupečků
+// Počet hodnot musí být stejný jako počet sloupečků
+// Pokud je velikost == 0, tak je použita automatická velikost
+// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+func (m TableModel) SetColSizes(s ...int) TableModel {
+	m.colSizes = s
 
 	return m
 }
