@@ -299,6 +299,9 @@ func (m TextModel) Update(msg tea.Msg) (TextModel, tea.Cmd, tea.Msg) {
 				m = m.SetSelectedLine(len(m.content) - 1)
 			}
 
+		default:
+			return m, nil, msg
+
 		}
 
 		return m, nil, nil

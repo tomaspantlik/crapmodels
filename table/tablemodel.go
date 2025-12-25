@@ -286,6 +286,9 @@ func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd, tea.Msg) {
 				m = m.SetSelectedLine(len(m.content) - 1)
 			}
 
+		default:
+			return m, nil, msg
+
 		}
 
 		return m, nil, nil
