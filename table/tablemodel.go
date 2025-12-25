@@ -302,9 +302,19 @@ func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd, tea.Msg) {
 func (m TableModel) View() string {
 	var s string
 
+	if len(m.content) == 0 {
+		return lipgloss.NewStyle().
+			Width(m.width).
+			Height(m.height - 2).
+			BorderStyle(m.borderType).
+			Render(s)
+	}
+
+	height := min(m.height-4+m.scrolledTop, len(m.content))
+
 	m.table = m.table.Headers(m.headers...).
 		ClearRows().
-		Rows(m.content[m.scrolledTop : m.height-4+m.scrolledTop]...).
+		Rows(m.content[m.scrolledTop:height]...).
 		Width(m.width).
 		BorderRight(false).
 		BorderBottom(false).
