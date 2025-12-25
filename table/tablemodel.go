@@ -328,8 +328,6 @@ func (m TableModel) View() string {
 
 	s = m.addBorders(s)
 
-	s += "\n" + fmt.Sprintf("width:%d, height:%d, len(content):%d, selectedLine:%d, scrolledTop:%d\n", m.width, m.height, len(m.content), m.selectedLine, m.scrolledTop)
-
 	return s
 }
 
