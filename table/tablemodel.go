@@ -389,19 +389,19 @@ func (m TableModel) addBorders(table string) string {
 		borderTop += m.borderType.TopRight
 	} else {
 		t := m.title
-		if len(m.title) > m.width-4 {
+		if len([]rune(m.title)) > m.width-4 {
 			t = m.title[:m.width-7] + "..."
 		}
 
-		o := len(t) % 2
+		o := len([]rune(t)) % 2
 		borderTop += strings.Repeat(
 			m.borderType.Top,
-			((m.width-1)/2)-(len(t)/2)-1,
+			((m.width-1)/2)-(len([]rune(t))/2)-1,
 		)
 		borderTop += "[" + m.titleStyle.Render(t) + m.borderStyle.Render("]")
 		borderTop += m.borderStyle.Render(strings.Repeat(
 			m.borderType.Top,
-			m.width-((m.width-1)/2)-(len(t)/2)-3-o,
+			m.width-((m.width-1)/2)-(len([]rune(t))/2)-3-o,
 		))
 		borderTop += m.borderStyle.Render(m.borderType.TopRight)
 	}
