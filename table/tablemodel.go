@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/acarl005/stripansi"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -310,17 +311,10 @@ func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd, tea.Msg) {
 // View() je standardní funkce pro bubbletea, rozšířená o parametr background
 // Volat v hlavním modelu a výsledek spojit s ostatním výstupem
 func (m TableModel) View() string {
-	var s string
-
-	if len(m.content) == 0 {
-		return lipgloss.NewStyle().
-			Width(m.width).
-			Height(m.height - 2).
-			BorderStyle(m.borderType).
-			Render(s)
-	}
-
-	height := min(m.height-4+m.scrolledTop, len(m.content))
+	var (
+		s      string
+		height = min(m.height-4+m.scrolledTop, len(m.content))
+	)
 
 	m.table = m.table.Headers(m.headers...).
 		ClearRows().
@@ -418,8 +412,6 @@ func (m TableModel) addBorders(table string) string {
 	} else {
 		s := m.scrolledTop / ((len(m.content) - 1) / (m.height - 4))
 
-		// borderRight = m.borderStyle.Render(m.borderType.Right) + "\n"
-		// borderRight += m.borderStyle.Render(m.borderType.MiddleRight) + "\n"
 		borderRight += m.borderStyle.Render(m.borderType.Right) + "\n"
 		borderRight += m.borderStyle.Render(m.borderType.Right) + "\n"
 
@@ -457,6 +449,23 @@ func (m TableModel) addBorders(table string) string {
 		borderBottom = m.borderType.BottomLeft + strings.Repeat(m.borderType.Bottom, m.width-3-len(borderBottom)) + borderBottom + m.borderType.Bottom + m.borderType.BottomRight
 	}
 	borderBottom = m.borderStyle.Render(borderBottom)
+
+	var fill string
+	zb := m.height - 5 - len(m.content)
+	if zb > 0 {
+		ll := strings.Split(stripansi.Strip(table), "\n")[0]
+		// fill += ll
+		ls := strings.Split(ll, m.borderType.Right)
+		for range zb + 1 {
+			// if i > 0 {
+			fill += "\n"
+			// }
+			for _, lf := range ls[:len(ls)-1] {
+				fill += strings.Repeat(" ", len([]rune(lf))) + m.borderType.Right
+			}
+		}
+	}
+	table = table + fill
 
 	ret := lipgloss.JoinHorizontal(lipgloss.Left, borderLeft, table, borderRight)
 	ret = lipgloss.JoinVertical(lipgloss.Left, borderTop, ret)
