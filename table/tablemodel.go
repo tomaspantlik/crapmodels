@@ -579,19 +579,18 @@ func (m TableModel) ViewScroll(num int) TableModel {
 // Pokud je num > 0, posune pohled o num stránek dolů
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) PageScroll(num int, moveSelected bool) TableModel {
+	m.scrolledTop += (m.height-5)*num + 1
 	if num > 0 {
-		m.scrolledTop += (m.height-5)*num + 1
 		if moveSelected {
 			m.selectedLine = m.scrolledTop + m.height - 5
 		}
 	} else if num < 0 {
-		m.scrolledTop += (m.height-5)*num - 1
 		if moveSelected {
 			m.selectedLine = m.scrolledTop
 		}
 	}
 
-	if m.scrolledTop <= 0 {
+	if m.scrolledTop < 0 {
 		m.scrolledTop = 0
 		if moveSelected {
 			m.selectedLine = m.scrolledTop
@@ -599,8 +598,12 @@ func (m TableModel) PageScroll(num int, moveSelected bool) TableModel {
 	}
 	if m.scrolledTop > len(m.content)-m.height-5 {
 		m.scrolledTop = len(m.content) - m.height + 4
+		m.scrolledTop = max(m.scrolledTop, 0)
 		if moveSelected {
 			m.selectedLine = m.scrolledTop + m.height - 5
+			if m.selectedLine > len(m.content) {
+				m.selectedLine = len(m.content) - 1
+			}
 		}
 	}
 
