@@ -259,6 +259,12 @@ func (m TabsModel) GetSelectedTab() int {
 	return m.selectedTab
 }
 
+// SetSelectedTab() nastaví vybranou záložku
+func (m TabsModel) SetSelectedTab(t int) TabsModel {
+	m.selectedTab = t
+	return m
+}
+
 // SetTabs() nastaví nové záložky
 // Pokud je délka textu tabů větší než šířka, zkracuje se jejich text
 func (m TabsModel) SetTabs(tabs ...string) TabsModel {
