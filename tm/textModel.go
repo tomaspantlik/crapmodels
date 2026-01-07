@@ -168,10 +168,10 @@ func WithDefaultColors(fg, bg lipgloss.Color) func(*TextModel) {
 			Foreground(fg).Background(bg).
 			Bold(true)
 		tm.scrollBarStyleBar = tm.scrollBarStyleBar.
-			Background(fg).
+			Foreground(fg).
 			Bold(true)
 		tm.scrollBarStyleSpace = tm.scrollBarStyleSpace.
-			Background(bg).
+			Foreground(bg).
 			Bold(true)
 		tm.linesStyle = tm.linesStyle.
 			Foreground(fg).Background(bg)
@@ -210,10 +210,10 @@ func WithBorderColors(fg, bg lipgloss.Color) func(*TextModel) {
 func WithScrollBarColors(bar, space lipgloss.Color) func(*TextModel) {
 	return func(tm *TextModel) {
 		tm.scrollBarStyleBar = tm.defaultStyle.
-			Background(bar).
+			Foreground(bar).
 			Bold(true)
 		tm.scrollBarStyleSpace = tm.defaultStyle.
-			Background(space).
+			Foreground(space).
 			Bold(true)
 	}
 }
@@ -373,8 +373,11 @@ func (m TextModel) addBorders(text string) string {
 
 	var borderRight string
 	if len(m.parsedContent) <= m.height-2 {
-		borderRight = strings.Repeat(m.borderType.Right+"\n", m.height-3)
-		borderRight += m.borderType.Right
+		borderRight = strings.Repeat(
+			m.borderStyle.Render(m.borderType.Right)+"\n",
+			m.height-3,
+		)
+		borderRight += m.borderStyle.Render(m.borderType.Right)
 	} else {
 		s := m.scrolledTop / ((len(m.parsedContent) - 1) / (m.height - 2))
 
