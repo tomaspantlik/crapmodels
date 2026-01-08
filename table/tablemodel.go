@@ -10,7 +10,6 @@ import (
 	"github.com/acarl005/stripansi"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
 )
 
 var (
@@ -78,15 +77,14 @@ type TableModel struct {
 	headers  []string
 	content  [][]string
 	colSizes []int
-	table    *table.Table
 
 	keys Keys
 
-	selectedLine  int
-	scrolledTop   int
-	filter        string
-	filterColums  []int
-	contentLength int
+	selectedLine    int
+	scrolledTop     int
+	filter          string
+	filterColums    []int
+	filteredContent [][]string
 
 	borderType          lipgloss.Border
 	borderStyle         lipgloss.Style
@@ -104,7 +102,6 @@ type TableModel struct {
 // Pro nastavení vlastností modelu použít jako parametry funkce WithKeys a další
 func NewTableModel(options ...func(*TableModel)) TableModel {
 	m := TableModel{
-		table:               table.New().Wrap(false),
 		keys:                DefaultKeys,
 		borderType:          lipgloss.RoundedBorder(),
 		borderStyle:         lipgloss.NewStyle().Bold(true),
@@ -124,10 +121,20 @@ func NewTableModel(options ...func(*TableModel)) TableModel {
 		opt(&m)
 	}
 
+	if len(m.headers) == 0 {
+		// TODO: tabulka bez headerů?
+		panic("nejsou nastaveny headry!")
+	}
+
+	if len(m.filterColums) == 0 {
+		for i := range len(m.headers) {
+			m.filterColums = append(m.filterColums, i)
+		}
+	}
+
 	return m
 }
 
-// TODO: doplnit funkce pro nastavení pevné šířky sloupců
 // TODO: barvy pro procenta
 
 // WithKeys() definuje vlastní klávesové zkratky modelu
@@ -158,7 +165,7 @@ func WithHeaders(headers ...string) func(*TableModel) {
 func WithContent(content ...[]string) func(*TableModel) {
 	return func(tm *TableModel) {
 		tm.content = content
-		tm.contentLength = len(content)
+		tm.filteredContent = content
 	}
 }
 
@@ -277,9 +284,6 @@ func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd, tea.Msg) {
 		}
 
 	case tea.KeyMsg:
-		if m.contentLength == 0 {
-			break
-		}
 
 		switch msg.String() {
 
@@ -318,116 +322,125 @@ func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd, tea.Msg) {
 	return m, nil, msg
 }
 
-func (m TableModel) filterContent() [][]string {
-	if m.filter == "" {
-		return m.content
-	}
-
-	var ret [][]string
-
-	filter := strings.ToLower(m.filter)
-	cols := m.filterColums
-	if len(m.filterColums) == 0 {
-		cols = []int{}
-		for i := range len(m.content[0]) {
-			cols = append(cols, i)
-		}
-	}
-
-	for _, line := range m.content {
-	line:
-		for _, colN := range cols {
-			if strings.Contains(strings.ToLower(line[colN]), filter) {
-				ret = append(ret, line)
-				break line
-			}
-		}
-	}
-	return ret
-}
-
-// View() je standardní funkce pro bubbletea, rozšířená o parametr background
+// View() je standardní funkce pro bubbletea
 // Volat v hlavním modelu a výsledek spojit s ostatním výstupem
 func (m TableModel) View() string {
-	var content [][]string
+	height := m.height
 	if m.filter != "" {
-		content = m.filterContent()
-	} else {
-		content = m.content
-	}
-
-	mh := m.height
-	if m.filter != "" {
-		mh--
+		height--
 	}
 
 	var (
-		s      string
-		height = min(mh-3+m.scrolledTop, m.contentLength)
+		s           string
+		linesHeight = min(height-3+m.scrolledTop, len(m.filteredContent))
+		colSizes    = m.computeColSizes()
 	)
 
-	m.table = m.table.Headers(m.headers...).
-		ClearRows().
-		Rows(content[m.scrolledTop:height]...).
-		Width(m.width).
-		BorderRight(false).
-		BorderBottom(false).
-		BorderTop(false).
-		BorderLeft(false).
-		BorderStyle(m.linesStyle.Foreground(m.borderStyle.GetForeground())).
-		BorderHeader(false)
+	var (
+		headers string
+		table   string
+	)
 
-	if m.colSizes != nil {
-		m.table = m.table.StyleFunc(func(row, col int) lipgloss.Style {
-			switch row {
-			case table.HeaderRow:
-				if m.colSizes[col] != 0 {
-					return m.headerStyle.Width(m.colSizes[col])
-				} else {
-					return m.headerStyle
-				}
-
-			case m.selectedLine - m.scrolledTop:
-				if m.colSizes[col] != 0 {
-					return m.selectedLineStyle.Width(m.colSizes[col])
-				} else {
-					return m.selectedLineStyle
-				}
-
-			default:
-				if m.colSizes[col] != 0 {
-					return m.linesStyle.Width(m.colSizes[col])
-				} else {
-					return m.linesStyle
-				}
-			}
-		})
-	} else {
-		m.table = m.table.StyleFunc(func(row, col int) lipgloss.Style {
-			switch row {
-			case table.HeaderRow:
-				return m.headerStyle
-
-			case m.selectedLine - m.scrolledTop:
-				return m.selectedLineStyle
-
-			default:
-				return m.linesStyle
-			}
-		})
+	for i, h := range m.headers {
+		if i > 0 && i < len(m.headers) {
+			headers = lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				headers,
+				m.headerStyle.Render(m.borderType.Right),
+			)
+		}
+		headers = lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			headers,
+			m.headerStyle.Width(colSizes[i]).Inline(true).MaxWidth(colSizes[i]).Render(h),
+		)
 	}
 
-	s += m.table.Render()
+	if m.filter != "" {
+		headers = lipgloss.JoinVertical(
+			lipgloss.Top, m.filterStyle.Render(" Filtr: "+m.filter), headers,
+		)
+	}
+
+	selectedLine := m.selectedLine - m.scrolledTop
+	for lineNum, line := range m.filteredContent[m.scrolledTop:linesHeight] {
+		if lineNum > linesHeight {
+			break
+		}
+		var tl string
+
+		style := m.linesStyle
+		if lineNum == selectedLine {
+			style = m.selectedLineStyle
+		}
+
+		for i, col := range line {
+			if i > 0 && i < len(m.headers) {
+				tl = lipgloss.JoinHorizontal(
+					lipgloss.Left,
+					tl,
+					style.Render(m.borderType.Right),
+				)
+			}
+			stripCol := stripansi.Strip(col)
+			if len([]rune(stripCol)) > colSizes[i] {
+				col = string([]rune(stripCol)[:colSizes[i]-1]) + "…"
+			}
+			tl = lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				tl,
+				style.Width(colSizes[i]).Inline(true).MaxWidth(colSizes[i]).Render(col),
+			)
+		}
+		if lineNum == 0 {
+			table = tl
+		} else {
+			table = lipgloss.JoinVertical(lipgloss.Top, table, tl)
+		}
+	}
+
+	lines := len(m.filteredContent[m.scrolledTop:linesHeight])
+	if lines < height {
+		var fill string
+		for i := range colSizes {
+			if i > 0 && i < len(m.headers) {
+				fill = lipgloss.JoinHorizontal(
+					lipgloss.Left,
+					fill,
+					m.linesStyle.Render(m.borderType.Right),
+				)
+			}
+			fill = lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				fill,
+				m.linesStyle.Width(colSizes[i]).Inline(true).MaxWidth(colSizes[i]).Render(" "),
+			)
+		}
+
+		for i := range height - lines - 3 {
+			if len(m.filteredContent) > 0 {
+				table = lipgloss.JoinVertical(lipgloss.Top, table, fill)
+			} else {
+				table += fill
+				if i < (height - lines - 4) {
+					table += "\n"
+				}
+			}
+		}
+	}
+
+	s = lipgloss.JoinVertical(
+		lipgloss.Top, headers, table,
+	)
 
 	s = m.addBorders(s)
 
 	return s
+
 }
 
 func (m TableModel) addBorders(table string) string {
-	if m.height < 5 {
-		return table
-	}
+	contentLength := len(m.filteredContent)
 
 	borderTop := m.borderType.TopLeft
 	if m.title == "" {
@@ -457,34 +470,31 @@ func (m TableModel) addBorders(table string) string {
 	borderLeft += m.borderType.Left
 	borderLeft = m.borderStyle.Render(borderLeft)
 
+	height := m.height - 3
+
 	var borderRight string
-	height := m.height
-	if m.filter != "" {
-		borderRight = m.borderStyle.Render(m.borderType.Right) + "\n"
-	}
-	if m.contentLength <= height-3 {
+	if contentLength <= height {
 		borderRight = strings.Repeat(
 			m.borderStyle.Render(m.borderType.Right)+"\n",
-			height-3,
+			height,
 		)
 		borderRight += m.borderStyle.Render(m.borderType.Right)
 	} else {
-		s := m.scrolledTop / ((m.contentLength - 1) / (height - 4))
+		s := m.scrolledTop / ((contentLength - 1) / (height - 1))
 
 		borderRight += m.borderStyle.Render(m.borderType.Right) + "\n"
 
-		// TADY NĚKDE CHYBÍ k hegiht přidat +1 když je zobrazený řádek s filtrem
-		if m.scrolledTop > m.contentLength-height-4 {
-			borderRight += strings.Repeat(m.scrollBarStyleSpace.Render("░")+"\n", height-4)
+		if m.scrolledTop > contentLength-height-1 {
+			borderRight += strings.Repeat(m.scrollBarStyleSpace.Render("░")+"\n", height-1)
 			borderRight += m.scrollBarStyleBar.Render("█")
 		} else {
-			for l := range height - 2 {
+			for l := range height {
 				if s == l {
 					borderRight += m.scrollBarStyleBar.Render("█")
 				} else {
 					borderRight += m.scrollBarStyleSpace.Render("░")
 				}
-				if l < height-4 {
+				if l < height-1 {
 					borderRight += "\n"
 				}
 			}
@@ -492,76 +502,35 @@ func (m TableModel) addBorders(table string) string {
 	}
 
 	var borderBottom string
-	if m.contentLength <= m.height-2 {
+	if contentLength == 0 {
 		borderBottom = m.borderType.BottomLeft
 		borderBottom += strings.Repeat(m.borderType.Bottom, m.width-2)
 		borderBottom += m.borderType.BottomRight
+	} else if contentLength <= height {
+		borderBottom += fmt.Sprintf("[%d/%d]", m.selectedLine+1, len(m.filteredContent)) + m.borderType.Bottom
+		borderBottom = m.borderType.BottomLeft +
+			strings.Repeat(m.borderType.Bottom, m.width-len(borderBottom)) +
+			borderBottom +
+			m.borderType.BottomRight
 	} else {
 		var p float64
-		if m.scrolledTop >= m.contentLength-m.height+3 {
+		if m.scrolledTop >= contentLength-height {
 			p = 100
 		} else {
-			p = (float64(m.scrolledTop) / float64(m.contentLength-1)) * 100
+			p = (float64(m.scrolledTop) / float64(contentLength-1)) * 100
 		}
 
-		borderBottom = fmt.Sprintf("[%.0f%%]", p)
+		borderBottom = fmt.Sprintf("[%.0f%%]", p) + m.borderType.Bottom
+		borderBottom += fmt.Sprintf("[%d/%d]", m.selectedLine+1, len(m.filteredContent))
 		borderBottom = m.borderType.BottomLeft +
-			strings.Repeat(m.borderType.Bottom, m.width-3-len(borderBottom)) +
+			strings.Repeat(m.borderType.Bottom, m.width-1-len(borderBottom)) +
 			borderBottom +
 			m.borderType.Bottom +
 			m.borderType.BottomRight
 	}
 	borderBottom = m.borderStyle.Render(borderBottom)
 
-	var fill string
-
-	zb := m.height - 4 - m.contentLength
-	if m.filter != "" {
-		zb--
-	}
-	if zb > 0 {
-		ll := strings.Split(stripansi.Strip(table), "\n")[0]
-		ls := strings.Split(ll, m.borderType.Right)
-		for i := range zb + 1 {
-			for _, lf := range ls[:len(ls)-1] {
-				fill += strings.Repeat(
-					m.linesStyle.Render(" "),
-					len([]rune(lf)),
-				) + m.linesStyle.
-					Foreground(m.borderStyle.GetForeground()).
-					Render(m.borderType.Right)
-			}
-			fill += strings.Repeat(m.linesStyle.Render(" "), len(ls[len(ls)-1]))
-			if i < zb {
-				fill += "\n"
-			}
-		}
-	}
-
-	ts := strings.Split(table, "\n")
-	header := ts[0]
-	ts = ts[1:]
-	table = strings.Join(ts, "\n")
-	hs := strings.Split(header, m.borderType.Right)
-
-	if len(table) > 0 {
-		table = strings.Join(hs, m.headerStyle.Render(m.borderType.Right)) + "\n" + table
-	} else {
-		table = strings.Join(hs, m.headerStyle.Render(m.borderType.Right))
-	}
-
-	if m.filter != "" {
-		table = lipgloss.JoinVertical(
-			lipgloss.Top, m.filterStyle.Width(50).Render("Filtr: "+m.filter), table,
-		)
-	}
-
-	if zb > 0 {
-		table = lipgloss.JoinVertical(lipgloss.Left, table, fill)
-	}
-
 	ret := lipgloss.JoinHorizontal(lipgloss.Left, borderLeft, table, borderRight)
-	// ret := lipgloss.JoinHorizontal(lipgloss.Left, table, borderRight)
 	ret = lipgloss.JoinVertical(lipgloss.Left, borderTop, ret)
 	ret = lipgloss.JoinVertical(lipgloss.Left, ret, borderBottom)
 
@@ -572,9 +541,9 @@ func (m TableModel) addBorders(table string) string {
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetFilter(filter string) TableModel {
 	m.filter = filter
+	m.filteredContent = m.filterContent()
 	m.scrolledTop = 0
 	m.selectedLine = 0
-	m.contentLength = len(m.filterContent())
 
 	return m
 }
@@ -597,7 +566,7 @@ func (m TableModel) SetHeaders(headers ...string) TableModel {
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetContent(rows ...[]string) TableModel {
 	m.content = rows
-	m.contentLength = len(m.filterContent())
+	m.filteredContent = m.filterContent()
 
 	return m
 }
@@ -616,7 +585,7 @@ func (m TableModel) SetColSizes(s ...int) TableModel {
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) AppendContent(rows ...[]string) TableModel {
 	m.content = append(m.content, rows...)
-	m.contentLength = len(m.filterContent())
+	m.filteredContent = m.filterContent()
 
 	return m
 }
@@ -628,7 +597,7 @@ func (m TableModel) GetContent() [][]string {
 
 // GetFilteredContent() vrátí obsah, pokud je nastavený filtr, tak filtrovaný
 func (m TableModel) GetFilteredContent() [][]string {
-	return m.filterContent()
+	return m.filteredContent
 }
 
 // SetSize() nastaví velikost okna
@@ -642,7 +611,7 @@ func (m TableModel) SetSize(width, height int) TableModel {
 // SetSelectedLine() nastaví vybraný řádek
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetSelectedLine(line int) TableModel {
-	if line < m.contentLength && line >= 0 {
+	if line < len(m.filteredContent) && line >= 0 {
 		m.selectedLine = line
 
 		if m.selectedLine >= m.scrolledTop+(m.height-4) {
@@ -667,7 +636,7 @@ func (m TableModel) GetSelectedLine() int {
 // SelectLastLine() nastaví vybraný řádek na poslední
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SelectLastLine() TableModel {
-	m = m.SetSelectedLine(m.contentLength - 1)
+	m = m.SetSelectedLine(len(m.filteredContent) - 1)
 
 	return m
 }
@@ -679,7 +648,7 @@ func (m TableModel) SelectLastLine() TableModel {
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) ViewScroll(num int) TableModel {
 	if num > 0 {
-		if m.scrolledTop+num <= m.contentLength-m.height+3 {
+		if m.scrolledTop+num <= len(m.filteredContent)-m.height+3 {
 			m.scrolledTop += num
 		}
 	} else if num < 0 {
@@ -702,7 +671,7 @@ func (m TableModel) PageScroll(num int, moveSelected bool) TableModel {
 		height--
 	}
 
-	m.scrolledTop += (m.height - 3) * num //+ 2
+	m.scrolledTop += (height - 3) * num
 	if num > 0 {
 		if moveSelected {
 			m.selectedLine = m.scrolledTop + height - 4
@@ -719,13 +688,15 @@ func (m TableModel) PageScroll(num int, moveSelected bool) TableModel {
 			m.selectedLine = m.scrolledTop
 		}
 	}
-	if m.scrolledTop > m.contentLength-height-4 {
-		m.scrolledTop = m.contentLength - height + 3
+
+	lenContent := len(m.filteredContent)
+	if m.scrolledTop > lenContent-height-3 {
+		m.scrolledTop = lenContent - height + 3
 		m.scrolledTop = max(m.scrolledTop, 0)
 		if moveSelected {
 			m.selectedLine = m.scrolledTop + height - 4
-			if m.selectedLine > m.contentLength {
-				m.selectedLine = m.contentLength - 1
+			if m.selectedLine > lenContent {
+				m.selectedLine = lenContent - 1
 			}
 		}
 	}
@@ -733,9 +704,88 @@ func (m TableModel) PageScroll(num int, moveSelected bool) TableModel {
 	return m
 }
 
+// SetTitle() nastaví titulek tabulky, pokud je nastaveno na "" tak se nezobrazuje vůbec
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetTitle(title string) TableModel {
 	m.title = title
 
 	return m
+}
+
+func (m TableModel) filterContent() [][]string {
+	if m.filter == "" {
+		return m.content
+	}
+
+	var ret [][]string
+
+	filter := strings.ToLower(m.filter)
+
+	for _, line := range m.content {
+	line:
+		for _, colN := range m.filterColums {
+			if strings.Contains(strings.ToLower(line[colN]), filter) {
+				ret = append(ret, line)
+				break line
+			}
+		}
+	}
+	return ret
+}
+
+func (m TableModel) computeColSizes() []int {
+	colSizes := make([]int, len(m.headers))
+
+	var fixedSize int
+
+	for colNum := range m.headers {
+		if m.colSizes[colNum] != 0 {
+			colSizes[colNum] = m.colSizes[colNum]
+			fixedSize += m.colSizes[colNum]
+		}
+	}
+
+	for colNum, hCol := range m.headers {
+		if m.colSizes[colNum] == 0 {
+			l := len([]rune(stripansi.Strip(hCol)))
+			if colSizes[colNum] < l {
+				colSizes[colNum] = l
+			}
+		}
+	}
+
+	for _, line := range m.filteredContent {
+		for colNum, col := range line {
+			if m.colSizes[colNum] == 0 {
+				l := len([]rune(stripansi.Strip(col)))
+				if colSizes[colNum] < l {
+					colSizes[colNum] = l
+				}
+			}
+		}
+	}
+
+	var varSize, varNum int
+	for i, col := range colSizes {
+		if m.colSizes[i] == 0 {
+			varSize += col
+			varNum++
+		}
+	}
+
+	base := (m.width - (len(m.headers) + 1) - fixedSize) / varNum
+	rem := (m.width - (len(m.headers) + 1) - fixedSize) % varNum
+
+	for i := range colSizes {
+		if m.colSizes[i] == 0 {
+			if rem > 0 {
+				colSizes[i] = base + 1
+				rem--
+			} else {
+				colSizes[i] = base
+			}
+		}
+	}
+
+	return colSizes
 }
