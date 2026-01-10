@@ -226,7 +226,7 @@ func WithColSizes(s ...int) func(*TableModel) {
 	}
 }
 
-// WithBorderType() nastaví styl okraje okna
+// WithBorderType() nastaví typ okraje okna
 // Pokud není použito, je nastaven výchozí styl lipgloss.RoundedBorder()
 func WithBorderType(borderStyle lipgloss.Border) func(*TableModel) {
 	return func(tm *TableModel) {
@@ -315,17 +315,12 @@ func WithFilterColums(cols ...int) func(*TableModel) {
 	}
 }
 
-// Init() standardní definice Init() pro bubbletea
-func (m TableModel) Init() tea.Cmd {
-	return nil
-}
-
 // Update() je standardní definice pro bubbletea
 // Návratové proměné jsou rozšířené o bubbletea.Msg
 //
 // Použití v hlavním modelu - na začátku funkce Update() zavolat:
 //
-//	m.text, cmd, msg = m.text.Update(msg)
+//	m.table, cmd, msg = m.table.Update(msg)
 //
 // Pokud je předána klávesová zkratka, která je v modelu zaregistrovaná pro ovládání,
 // model si ji přebere a nepošle ji dál. Ostatní tea.KeyMsg i tea.Msg posílá zpět
@@ -660,6 +655,7 @@ func (m TableModel) addBorders(table string) string {
 
 // Sort() seřadí tabulku podle sloupečku col a ve směru dir
 // Pro zrušení řazení předat do dir NoSort
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) Sort(col int, dir SortOrder) TableModel {
 	if col > len(m.headers)-1 {
 		return m
@@ -682,7 +678,7 @@ func (m TableModel) GetSorting() (sortCol int, sortOder SortOrder) {
 }
 
 // SetFilter() nastaví filtr na tabulce
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetFilter(filter string) TableModel {
 	m.filter = filter
 	m.filteredContent = m.filterContent()
@@ -694,13 +690,13 @@ func (m TableModel) SetFilter(filter string) TableModel {
 }
 
 // GetFilter() vrátí nastavený filtr na tabulce
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) GetFilter() string {
 	return m.filter
 }
 
 // SetHeaders() nastaví nové headery
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetHeaders(headers ...string) TableModel {
 	m.headers = headers
 
@@ -708,7 +704,7 @@ func (m TableModel) SetHeaders(headers ...string) TableModel {
 }
 
 // SetContent() nastaví nové řádky, starý obsah zahodí
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetContent(rows ...[]string) TableModel {
 	m.content = rows
 	m.filteredContent = m.filterContent()
@@ -720,15 +716,15 @@ func (m TableModel) SetContent(rows ...[]string) TableModel {
 // SetColSizes() nastaví šířku sloupečků
 // Počet hodnot musí být stejný jako počet sloupečků
 // Pokud je velikost == 0, tak je použita automatická velikost
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetColSizes(s ...int) TableModel {
 	m.colSizes = s
 
 	return m
 }
 
-// SetContent() přidá další řádky
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// AppendContent() přidá další řádky
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) AppendContent(rows ...[]string) TableModel {
 	m.content = append(m.content, rows...)
 	m.filteredContent = m.filterContent()
@@ -748,7 +744,7 @@ func (m TableModel) GetFilteredContent() [][]string {
 }
 
 // SetSize() nastaví velikost okna
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetSize(width, height int) TableModel {
 	m.width, m.height = width, height
 	m.filterInput.Width = m.width - 11
@@ -757,7 +753,7 @@ func (m TableModel) SetSize(width, height int) TableModel {
 }
 
 // SetSelectedLine() nastaví vybraný řádek
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetSelectedLine(line int) TableModel {
 	if line < len(m.filteredContent) && line >= 0 {
 		m.selectedLine = line
@@ -782,7 +778,7 @@ func (m TableModel) GetSelectedLine() int {
 }
 
 // SelectLastLine() nastaví vybraný řádek na poslední
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SelectLastLine() TableModel {
 	m = m.SetSelectedLine(len(m.filteredContent) - 1)
 
@@ -793,7 +789,7 @@ func (m TableModel) SelectLastLine() TableModel {
 // Neposunuje aktuálně vybraný řádek
 // Pokud je num < 0, posouvá pohled nahoru o num řádků
 // Pokud je num > 0, posouvá pohled dolů o num řádků
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) ViewScroll(num int) TableModel {
 	if num > 0 {
 		if m.scrolledTop+num <= len(m.filteredContent)-m.height+3 {
@@ -812,7 +808,7 @@ func (m TableModel) ViewScroll(num int) TableModel {
 // Pokud je moveSelected == true, posune i aktuálně vybraný řádek
 // Pokud je num < 0, posune pohled o num stránek nahoru
 // Pokud je num > 0, posune pohled o num stránek dolů
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) PageScroll(num int, moveSelected bool) TableModel {
 	height := m.height
 	if m.filter != "" {
@@ -853,7 +849,7 @@ func (m TableModel) PageScroll(num int, moveSelected bool) TableModel {
 }
 
 // SetTitle() nastaví titulek tabulky, pokud je nastaveno na "" tak se nezobrazuje vůbec
-// Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
+// Vrací TableModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetTitle(title string) TableModel {
 	m.title = title
 

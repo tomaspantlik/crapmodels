@@ -119,11 +119,6 @@ func WithBorderColors(fg, bg lipgloss.Color) func(*TabsModel) {
 	}
 }
 
-// Init() standardní definice Init() pro bubbletea
-func (m TabsModel) Init() tea.Cmd {
-	return nil
-}
-
 // Update() je standardní definice pro bubbletea
 // Návratové proměné jsou rozšířené o bubbletea.Msg
 //
