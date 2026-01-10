@@ -1,16 +1,38 @@
 // Package table slouží pro zobrazení tabulky v okně - každý řádek tabulky lze
 // vybírat, pomocí klávesových zkratek je možné procházet tabulku. Je možné nastavit
-// i vlastní vzhled okna a textu
+// i vlastní vzhled okna a textu. Obsah je možné filtrovat a řadit
 package table
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+
+	"golang.org/x/text/collate"
+	"golang.org/x/text/language"
 
 	"github.com/acarl005/stripansi"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+type SortOrder int
+
+const (
+	SortAscendig   SortOrder = iota // řadit vzestupně
+	SortDescending                  // řadit sestupně
+	SortUnsorted                    // neřadit
+)
+
+var sortOrderName = map[SortOrder]string{
+	SortAscendig:   "SortAscending",
+	SortDescending: "SortDescending",
+	SortUnsorted:   "SortUnsorted",
+}
+
+func (so SortOrder) String() string {
+	return sortOrderName[so]
+}
 
 var (
 	// DefaultKeys je výchozí mapování klávesových zkratek
@@ -80,11 +102,15 @@ type TableModel struct {
 
 	keys Keys
 
-	selectedLine    int
-	scrolledTop     int
+	selectedLine int
+	scrolledTop  int
+
 	filter          string
 	filterColums    []int
 	filteredContent [][]string
+	sortByCol       int
+	sortOrder       SortOrder
+	sortedContent   [][]string
 
 	borderType          lipgloss.Border
 	borderStyle         lipgloss.Style
@@ -115,6 +141,7 @@ func NewTableModel(options ...func(*TableModel)) TableModel {
 			Background(lipgloss.Color("#FFFFFF")).
 			Bold(true),
 		filterStyle: lipgloss.NewStyle().Italic(true),
+		sortOrder:   SortUnsorted,
 	}
 
 	for _, opt := range options {
@@ -332,7 +359,7 @@ func (m TableModel) View() string {
 
 	var (
 		s           string
-		linesHeight = min(height-3+m.scrolledTop, len(m.filteredContent))
+		linesHeight = min(height-3+m.scrolledTop, len(m.sortedContent))
 		colSizes    = m.computeColSizes()
 	)
 
@@ -349,6 +376,24 @@ func (m TableModel) View() string {
 				m.headerStyle.Render(m.borderType.Right),
 			)
 		}
+
+		if m.sortByCol == i {
+			switch m.sortOrder {
+			case SortAscendig:
+				h = " " + h
+			case SortDescending:
+				h = " " + h
+			}
+		}
+
+		stripCol := stripansi.Strip(h)
+		hLen := len([]rune(stripCol))
+		if hLen > colSizes[i] {
+			if hLen > 3 {
+				h = string([]rune(stripCol)[:colSizes[i]-1]) + "…"
+			}
+		}
+
 		headers = lipgloss.JoinHorizontal(
 			lipgloss.Left,
 			headers,
@@ -363,7 +408,7 @@ func (m TableModel) View() string {
 	}
 
 	selectedLine := m.selectedLine - m.scrolledTop
-	for lineNum, line := range m.filteredContent[m.scrolledTop:linesHeight] {
+	for lineNum, line := range m.sortedContent[m.scrolledTop:linesHeight] {
 		if lineNum > linesHeight {
 			break
 		}
@@ -399,7 +444,7 @@ func (m TableModel) View() string {
 		}
 	}
 
-	lines := len(m.filteredContent[m.scrolledTop:linesHeight])
+	lines := len(m.sortedContent[m.scrolledTop:linesHeight])
 	if lines < height {
 		var fill string
 		for i := range colSizes {
@@ -418,7 +463,7 @@ func (m TableModel) View() string {
 		}
 
 		for i := range height - lines - 3 {
-			if len(m.filteredContent) > 0 {
+			if len(m.sortedContent) > 0 {
 				table = lipgloss.JoinVertical(lipgloss.Top, table, fill)
 			} else {
 				table += fill
@@ -440,7 +485,7 @@ func (m TableModel) View() string {
 }
 
 func (m TableModel) addBorders(table string) string {
-	contentLength := len(m.filteredContent)
+	contentLength := len(m.sortedContent)
 
 	borderTop := m.borderType.TopLeft
 	if m.title == "" {
@@ -507,7 +552,7 @@ func (m TableModel) addBorders(table string) string {
 		borderBottom += strings.Repeat(m.borderType.Bottom, m.width-2)
 		borderBottom += m.borderType.BottomRight
 	} else if contentLength <= height {
-		borderBottom += fmt.Sprintf("[%d/%d]", m.selectedLine+1, len(m.filteredContent)) + m.borderType.Bottom
+		borderBottom += fmt.Sprintf("[%d/%d]", m.selectedLine+1, len(m.sortedContent)) + m.borderType.Bottom
 		borderBottom = m.borderType.BottomLeft +
 			strings.Repeat(m.borderType.Bottom, m.width-len(borderBottom)) +
 			borderBottom +
@@ -521,7 +566,7 @@ func (m TableModel) addBorders(table string) string {
 		}
 
 		borderBottom = fmt.Sprintf("[%.0f%%]", p) + m.borderType.Bottom
-		borderBottom += fmt.Sprintf("[%d/%d]", m.selectedLine+1, len(m.filteredContent))
+		borderBottom += fmt.Sprintf("[%d/%d]", m.selectedLine+1, len(m.sortedContent))
 		borderBottom = m.borderType.BottomLeft +
 			strings.Repeat(m.borderType.Bottom, m.width-1-len(borderBottom)) +
 			borderBottom +
@@ -537,11 +582,35 @@ func (m TableModel) addBorders(table string) string {
 	return ret
 }
 
+// Sort() seřadí tabulku podle sloupečku col a ve směru dir
+// Pro zrušení řazení předat do dir NoSort
+func (m TableModel) Sort(col int, dir SortOrder) TableModel {
+	if col > len(m.headers)-1 {
+		return m
+	}
+	m.sortByCol = col
+	m.sortOrder = dir
+
+	if dir == SortUnsorted {
+		m.sortedContent = m.filteredContent
+	} else {
+		m.sortedContent = m.sortFilteredContent()
+	}
+
+	return m
+}
+
+// GetSorting() vrátí sloupeček, podle kterého se řadí a směř řazení
+func (m TableModel) GetSorting() (sortCol int, sortOder SortOrder) {
+	return m.sortByCol, m.sortOrder
+}
+
 // SetFilter() nastaví filtr na tabulce
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetFilter(filter string) TableModel {
 	m.filter = filter
 	m.filteredContent = m.filterContent()
+	m.sortedContent = m.sortFilteredContent()
 	m.scrolledTop = 0
 	m.selectedLine = 0
 
@@ -567,6 +636,7 @@ func (m TableModel) SetHeaders(headers ...string) TableModel {
 func (m TableModel) SetContent(rows ...[]string) TableModel {
 	m.content = rows
 	m.filteredContent = m.filterContent()
+	m.sortedContent = m.sortFilteredContent()
 
 	return m
 }
@@ -586,6 +656,7 @@ func (m TableModel) SetColSizes(s ...int) TableModel {
 func (m TableModel) AppendContent(rows ...[]string) TableModel {
 	m.content = append(m.content, rows...)
 	m.filteredContent = m.filterContent()
+	m.sortedContent = m.sortFilteredContent()
 
 	return m
 }
@@ -710,6 +781,27 @@ func (m TableModel) SetTitle(title string) TableModel {
 	m.title = title
 
 	return m
+}
+
+func (m TableModel) sortFilteredContent() [][]string {
+	s := make([][]string, len(m.filteredContent))
+	copy(s, m.filteredContent)
+
+	if m.sortOrder != SortUnsorted {
+		c := collate.New(language.Czech)
+		slices.SortFunc(s, func(a, b []string) int {
+			switch m.sortOrder {
+			case SortAscendig:
+				return c.CompareString(a[m.sortByCol], b[m.sortByCol])
+			case SortDescending:
+				return c.CompareString(b[m.sortByCol], a[m.sortByCol])
+			default:
+				return 0
+			}
+		})
+	}
+
+	return s
 }
 
 func (m TableModel) filterContent() [][]string {
