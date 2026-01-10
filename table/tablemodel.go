@@ -12,6 +12,7 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/acarl005/stripansi"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -55,6 +56,9 @@ var (
 		Top2:            tea.KeyHome.String(),
 		Bottom1:         "G",
 		Bottom2:         tea.KeyEnd.String(),
+		Filter1:         "f",
+		Filter2:         "/",
+		ClearFilter1:    tea.KeyCtrlF.String(),
 	}
 )
 
@@ -87,6 +91,12 @@ type Keys struct {
 	Bottom1         string
 	Bottom2         string
 	Bottom3         string
+	Filter1         string
+	Filter2         string
+	Filter3         string
+	ClearFilter1    string
+	ClearFilter2    string
+	ClearFilter3    string
 }
 
 // TableModel je model pro použití v bubbletea aplikaci
@@ -111,6 +121,10 @@ type TableModel struct {
 	sortByCol       int
 	sortOrder       SortOrder
 	sortedContent   [][]string
+
+	filterInput          textinput.Model
+	filterPrev           string
+	filterInputDisplayed bool
 
 	borderType          lipgloss.Border
 	borderStyle         lipgloss.Style
@@ -140,7 +154,7 @@ func NewTableModel(options ...func(*TableModel)) TableModel {
 			Foreground(lipgloss.Color("#000000")).
 			Background(lipgloss.Color("#FFFFFF")).
 			Bold(true),
-		filterStyle: lipgloss.NewStyle().Italic(true),
+		filterStyle: lipgloss.NewStyle().Italic(true).Bold(true),
 		sortOrder:   SortUnsorted,
 	}
 
@@ -158,6 +172,13 @@ func NewTableModel(options ...func(*TableModel)) TableModel {
 			m.filterColums = append(m.filterColums, i)
 		}
 	}
+
+	m.filterInput = textinput.New()
+	m.filterInput.Prompt = " Filtr: "
+	m.filterInput.TextStyle = m.filterStyle
+	m.filterInput.PromptStyle = m.filterStyle
+	m.filterInput.Cursor.Style = m.filterStyle
+	m.filterInput.Focus()
 
 	return m
 }
@@ -277,6 +298,15 @@ func WithSelectedLineColors(fg, bg lipgloss.Color) func(*TableModel) {
 	}
 }
 
+// WithFilterColors() nastaví barvy pro filtr
+func WithFilterColors(fg, bg lipgloss.Color) func(*TableModel) {
+	return func(tm *TableModel) {
+		tm.filterStyle = lipgloss.NewStyle().
+			Foreground(fg).Background(bg).
+			Italic(true).Bold(true)
+	}
+}
+
 // WithFilterColums() nastaví, podle kterých sloupečků se má filtrovat obsah pomocí SetFilter()
 // Pokud není nastaveno, filtruje podle všech sloupečků
 func WithFilterColums(cols ...int) func(*TableModel) {
@@ -301,16 +331,42 @@ func (m TableModel) Init() tea.Cmd {
 // model si ji přebere a nepošle ji dál. Ostatní tea.KeyMsg i tea.Msg posílá zpět
 func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd, tea.Msg) {
 	switch msg := msg.(type) {
-
-	case tea.WindowSizeMsg:
-		if m.width > msg.Width {
-			m.width = msg.Width
-		}
-		if m.height > msg.Height {
-			m.height = msg.Height
-		}
-
 	case tea.KeyMsg:
+
+		if m.filterInputDisplayed {
+			var cmd tea.Cmd
+
+			switch msg.Type {
+			case tea.KeyEsc:
+				m.filterInputDisplayed = false
+
+				m.filterInput, cmd = m.filterInput.Update(msg)
+				m = m.SetFilter(m.filterPrev)
+
+				return m, cmd, nil
+
+			case tea.KeyEnter:
+				m.filterInputDisplayed = false
+
+				m.filterInput, cmd = m.filterInput.Update(msg)
+				m = m.SetFilter(m.filterInput.Value())
+				m.filterPrev = m.filterInput.Value()
+
+				return m, cmd, nil
+
+			case tea.KeyRunes:
+				m.filterInput, cmd = m.filterInput.Update(msg)
+				m = m.SetFilter(m.filterInput.Value())
+
+				return m, cmd, nil
+
+			default:
+				m.filterInput, cmd = m.filterInput.Update(msg)
+				m = m.SetFilter(m.filterInput.Value())
+
+				return m, cmd, nil
+			}
+		}
 
 		switch msg.String() {
 
@@ -338,12 +394,20 @@ func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd, tea.Msg) {
 		case m.keys.Bottom1, m.keys.Bottom2, m.keys.Bottom3:
 			m = m.SelectLastLine()
 
+		case m.keys.Filter1, m.keys.Filter2, m.keys.Filter3:
+			m.filterInputDisplayed = true
+			m.filterInput.SetValue(m.filter)
+			m.filterInput.SetCursor(420)
+
+			return m, nil, nil
+
+		case m.keys.ClearFilter1, m.keys.ClearFilter2, m.keys.ClearFilter3:
+			m = m.SetFilter("")
+
 		default:
 			return m, nil, msg
-
 		}
 
-		return m, nil, nil
 	}
 
 	return m, nil, msg
@@ -353,7 +417,7 @@ func (m TableModel) Update(msg tea.Msg) (TableModel, tea.Cmd, tea.Msg) {
 // Volat v hlavním modelu a výsledek spojit s ostatním výstupem
 func (m TableModel) View() string {
 	height := m.height
-	if m.filter != "" {
+	if m.filter != "" || m.filterInputDisplayed {
 		height--
 	}
 
@@ -401,9 +465,21 @@ func (m TableModel) View() string {
 		)
 	}
 
-	if m.filter != "" {
+	if m.filterInputDisplayed {
 		headers = lipgloss.JoinVertical(
-			lipgloss.Top, m.filterStyle.Render(" Filtr: "+m.filter), headers,
+			lipgloss.Top, m.filterInput.View(), headers,
+		)
+	} else if m.filter != "" {
+		filter := m.filter
+		l := len([]rune(filter))
+		width := m.width - 10
+		if l > width {
+			filter = string([]rune(m.filter)[:width-1]) + "…"
+		}
+		headers = lipgloss.JoinVertical(
+			lipgloss.Top,
+			m.filterStyle.Width(m.width-2).Render(" Filtr: "+filter),
+			headers,
 		)
 	}
 
@@ -675,6 +751,7 @@ func (m TableModel) GetFilteredContent() [][]string {
 // Vrací TextModel, který je potřeba přiřadit/přepsat v hlavním modelu
 func (m TableModel) SetSize(width, height int) TableModel {
 	m.width, m.height = width, height
+	m.filterInput.Width = m.width - 11
 
 	return m
 }
