@@ -1,3 +1,4 @@
+// Package Window slouží pro zobrazení obsahu v jednoduchém okně
 package window
 
 import (
@@ -7,6 +8,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// WindowModel je model pro použití v bubbletea aplikaci
+// Pro interakci s modelem se používají výhradně receiver funkce, které vracejí
+// zpět upravený model
 type WindowModel struct {
 	width, height int
 
@@ -22,7 +26,10 @@ type WindowModel struct {
 	contentPadding           int
 }
 
-func NewModel(options ...func(*WindowModel)) WindowModel {
+// NewWindowModel() je funkce pro vytvoření nového WindowModelu
+// Nastavuje některé výchozí vlastnosti jako barvy a vzhled
+// Pro nastavení vlastností modelu použít jako parametry funkce WithTitle a další
+func NewWindowModel(options ...func(*WindowModel)) WindowModel {
 	m := WindowModel{
 		borderType:   lipgloss.RoundedBorder(),
 		borderStyle:  lipgloss.NewStyle().Bold(true),

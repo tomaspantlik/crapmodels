@@ -77,6 +77,7 @@ type QuitModel struct {
 	windowStyle           lipgloss.Style
 	borderType            lipgloss.Border
 	borderStyle           lipgloss.Style
+	borderBg, borderFg    lipgloss.Color
 	unselectedButtonStyle lipgloss.Style
 	selectedButtonStyle   lipgloss.Style
 	whiteSpaceBg          lipgloss.Color
@@ -155,9 +156,8 @@ func WithBorderType(borderStyle lipgloss.Border) func(*QuitModel) {
 // WithBorderColors() definuje barvu popředí a pozadí okraje okna
 func WithBorderColors(fg, bg lipgloss.Color) func(*QuitModel) {
 	return func(qm *QuitModel) {
-		qm.borderStyle = qm.borderStyle.
-			BorderBackground(bg).BorderForeground(fg).
-			Bold(true)
+		qm.borderBg = bg
+		qm.borderFg = fg
 	}
 }
 
@@ -175,7 +175,7 @@ func WithUnselectedButtonColors(fg, bg lipgloss.Color) func(*QuitModel) {
 	return func(qm *QuitModel) {
 		qm.unselectedButtonStyle = qm.windowStyle.
 			Foreground(fg).Background(bg).
-			BorderBackground(qm.windowStyle.GetBackground()).
+			// BorderBackground(qm.windowStyle.GetBackground()).
 			Width(10).Align(lipgloss.Center).Bold(true).
 			BorderStyle(lipgloss.RoundedBorder())
 	}
@@ -187,7 +187,7 @@ func WithSelectedButtonColors(fg, bg lipgloss.Color) func(*QuitModel) {
 	return func(qm *QuitModel) {
 		qm.selectedButtonStyle = qm.windowStyle.
 			Foreground(fg).Background(bg).
-			BorderBackground(qm.windowStyle.GetBackground()).
+			// BorderBackground(qm.windowStyle.GetBackground()).
 			Width(10).Align(lipgloss.Center).Bold(true).
 			Underline(true).
 			BorderStyle(lipgloss.RoundedBorder())
@@ -277,11 +277,11 @@ func (m QuitModel) viewButtons() string {
 
 	var yesButton, noButton string
 	if m.selectedButton == 0 {
-		yesButton = m.selectedButtonStyle.Render(yes)
-		noButton = m.unselectedButtonStyle.Render(no)
+		yesButton = m.selectedButtonStyle.Width(10).BorderBackground(m.borderBg).Render(yes)
+		noButton = m.unselectedButtonStyle.Width(10).BorderBackground(m.borderBg).Render(no)
 	} else {
-		yesButton = m.unselectedButtonStyle.Render(yes)
-		noButton = m.selectedButtonStyle.Render(no)
+		yesButton = m.unselectedButtonStyle.Width(10).BorderBackground(m.borderBg).Render(yes)
+		noButton = m.selectedButtonStyle.Width(10).BorderBackground(m.borderBg).Render(no)
 	}
 
 	s := lipgloss.JoinHorizontal(
@@ -310,8 +310,9 @@ func (m QuitModel) View(background string) string {
 
 		buttons := m.viewButtons()
 		q := m.windowStyle.Padding(1, 2).Width(40).Align(lipgloss.Center).Render(m.questionStr)
+		sp := m.windowStyle.Width(40).Render(" ")
 
-		s := lipgloss.JoinVertical(lipgloss.Center, q, buttons)
+		s := lipgloss.JoinVertical(lipgloss.Center, q, buttons, sp)
 		s = m.borderStyle.Render(s)
 
 		s = lipgloss.Place(
